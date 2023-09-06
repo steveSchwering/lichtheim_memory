@@ -1,0 +1,62 @@
+---
+title: "compare_representations"
+author: "Steve Schwering"
+date: "8/30/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Read in the datasets
+
+```{r}
+lexicon = read_csv('lexicon.csv')
+
+word_ordering = lexicon$word
+```
+
+```{r}
+localist_similarities = read_csv('localist_similarities.csv') %>%
+  filter(!word_1 == '<PAD>') %>%
+  filter(!word_2 == '<PAD>') %>%
+  mutate(word_1 = as_factor(word_1),
+         word_1 = fct_relevel(word_1, word_ordering),
+         word_2 = as_factor(word_2),
+         word_2 = fct_relevel(word_2, word_ordering))
+
+spacy_similarities = read_csv('spacy_similarities.csv') %>%
+  filter(!word_1 == '<PAD>') %>%
+  filter(!word_2 == '<PAD>') %>%
+  mutate(word_1 = as_factor(word_1),
+         word_1 = fct_relevel(word_1, word_ordering),
+         word_2 = as_factor(word_2),
+         word_2 = fct_relevel(word_2, word_ordering))
+```
+
+# Visualizing the semantic space
+
+```{r}
+localist_similarities %>%
+  ggplot(aes(x = word_1, y = word_2, fill = similarity)) +
+  geom_tile() +
+  labs(title = 'Similarities from localist representations',
+       x = 'Word 1',
+       y = 'Word 2',
+       fill = 'Cosine similarity') +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  scale_fill_gradient(low = "#FEFFF9", high = "#FF934F")
+```
+
+```{r}
+spacy_similarities %>%
+  ggplot(aes(x = word_1, y = word_2, fill = similarity)) +
+  geom_tile() +
+  labs(title = 'Similarities from spacy embeddings',
+       x = 'Word 1',
+       y = 'Word 2',
+       fill = 'Cosine similarity') +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  scale_fill_gradient(low = "#FEFFF9", high = "#FF934F")
+```
