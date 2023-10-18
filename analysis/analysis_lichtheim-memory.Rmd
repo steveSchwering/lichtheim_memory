@@ -1,0 +1,1150 @@
+---
+title: "analysis"
+author: "Steve Schwering"
+date: "2022-09-12"
+output: html_document
+---
+
+# Examining model loss
+
+```{r}
+loss_path = paste(getwd(), "/loss/", sep = "")
+paths_all_model_loss = fs::dir_ls(path = loss_path,
+                                  type = "directory",
+                                  recurse = FALSE)
+
+library(glue)
+
+get_loss = function(all_loss_dir, model = "*", epoch = "*", behavior_type = "*") {
+  glob = glue("*{model}_e{epoch}_loss_{behavior_type}.csv")
+  
+  paths = fs::dir_ls(path = all_loss_dir,
+                      type = "file",
+                      recurse = TRUE,
+                      glob = glob)
+  
+  paths %>%
+    map_df(~read_csv(.))
+}
+```
+
+```{r}
+loss_train_df = get_loss(all_loss_dir = paths_all_model_loss,
+                         model = "*",
+                         epoch = "*",
+                         behavior_type = "train")
+
+loss_train_df = loss_train_df %>%  
+  mutate(loss = str_replace_all(loss, fixed("{"), ""),
+         loss = str_replace_all(loss, fixed("}"), ""),
+         loss = as.numeric(loss)) %>%
+  mutate(task = str_to_title(task),
+         structure = str_to_title(structure),
+         structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"),)
+```
+
+```{r}
+# Looking at overall loss across tasks
+loss_train_df %>%
+  group_by(trained_epochs, loss_type, task) %>%
+  summarise(m_loss = mean(loss)) %>%
+  ggplot(aes(x = trained_epochs, y = m_loss, color = loss_type)) +
+  geom_point() +
+  geom_line() +
+  scale_y_continuous(limits = c(0, 1.0)) +
+  facet_wrap(~task) +
+  scale_colour_branded()
+  
+# Examining comprehension loss
+loss_train_comp_df = loss_train_df %>%
+  filter(loss_type == 'loss_ss' & task == 'Comprehension') %>%
+  group_by(trained_epochs, structure) %>%
+  summarise(m_loss = mean(loss)) %>%
+  mutate(structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"))
+
+# Examining production loss
+loss_train_prod_df = loss_train_df %>%
+  filter(loss_type == 'loss_ph' & task == 'Production') %>%
+  group_by(trained_epochs, structure) %>%
+  summarise(m_loss = mean(loss)) %>%
+  mutate(structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"))
+
+# Examining repetition loss
+loss_train_rep_df = loss_train_df %>%
+  filter(loss_type == 'loss_ph' & task == 'Repetition') %>%
+  group_by(trained_epochs, structure) %>%
+  summarise(m_loss = mean(loss)) %>%
+  mutate(structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"))
+```
+
+```{r}
+loss_test_df = get_loss(all_loss_dir = paths_all_model_loss,
+                         model = "lm_113_2022-11-29_cfd8984b-de1c-472f-a763-7e0807d27934",
+                         epoch = "*",
+                         behavior_type = "test")
+
+loss_test_df = loss_test_df %>%  
+  mutate(loss = str_replace_all(loss, fixed("{"), ""),
+         loss = str_replace_all(loss, fixed("}"), ""),
+         loss = as.numeric(loss)) %>%
+  mutate(task = str_to_title(task),
+         structure = str_to_title(structure),
+         structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"))
+```
+
+```{r}
+# Examining comprehension loss
+loss_test_comp_df = loss_test_df %>%
+  filter(loss_type == 'loss_ss' & task == 'Comprehension') %>%
+  group_by(trained_epochs, structure) %>%
+  summarise(m_loss = mean(loss)) %>%
+  mutate(structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"))
+
+# Examining production loss
+loss_test_prod_df = loss_test_df %>%
+  filter(loss_type == 'loss_ph' & task == 'Production') %>%
+  group_by(trained_epochs, structure) %>%
+  summarise(m_loss = mean(loss)) %>%
+  mutate(structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"))
+
+# Examining repetition loss
+loss_test_rep_df = loss_test_df %>%
+  filter(loss_type == 'loss_ph' & task == 'Repetition') %>%
+  group_by(trained_epochs, structure) %>%
+  summarise(m_loss = mean(loss)) %>%
+  mutate(structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive"))
+```
+
+```{r}
+loss_train_comp_df %>%
+  ggplot(aes(x = trained_epochs, y = m_loss, color = structure)) +
+  geom_point(alpha = 0.75, 
+             size = 0.75) +
+  geom_line(alpha = 0.75, 
+            size = 0.50) +
+  scale_y_continuous(limits = c(0, 0.5)) +
+  scale_colour_branded() +
+  labs(x = "Number of trained epochs",
+       y = "Average sentence semantic loss (MSE)",
+       color = "Structure",
+       title = "Loss: Comprehension during training") +
+  geom_point(data = loss_test_comp_df, 
+             shape = 2, 
+             alpha = 0.5, 
+             size = 0.75) +
+  geom_line(data = loss_test_comp_df, 
+            linetype = 'dotted', 
+            alpha = 0.5, 
+            size = 0.50) +
+  facet_wrap(~structure) +
+  theme(panel.background = element_rect(fill = "white",
+                                  colour = "white",
+                                  size = 0.5, linetype = "solid"))
+
+
+loss_train_prod_df %>%
+  ggplot(aes(x = trained_epochs, y = m_loss, color = structure)) +
+  geom_point(alpha = 0.75, 
+             size = 0.75) +
+  geom_line(alpha = 0.75, 
+             size = 0.50) +
+  scale_y_continuous(limits = c(0, 0.5)) +
+  scale_colour_branded() +
+  labs(x = "Number of trained epochs",
+       y = "Average phonology loss (BCE)",
+       color = "Structure",
+       title = "Loss: Production during training") +
+  geom_point(data = loss_test_prod_df, 
+             shape = 2,
+             alpha = 0.50,
+             size = 0.75) +
+  geom_line(data = loss_test_prod_df, 
+            linetype = 'dotted', 
+            alpha = 0.50,
+            size = 0.50) +
+  facet_wrap(~structure) +
+  theme(panel.background = element_rect(fill = "white",
+                                  colour = "white",
+                                  size = 0.5, linetype = "solid"))
+
+
+loss_train_rep_df %>%
+  ggplot(aes(x = trained_epochs, y = m_loss, color = structure)) +
+  geom_point(alpha = 0.75, 
+             size = 0.75) +
+  geom_line(alpha = 0.75, 
+             size = 0.50) +
+  scale_y_continuous(limits = c(0, 0.5)) +
+  scale_colour_branded() +
+  labs(x = "Number of trained epochs",
+       y = "Average phonology loss (BCE)",
+       color = "Structure",
+       title = "Loss: Repetition during training") +
+  geom_point(data = loss_test_rep_df, 
+             shape = 2, 
+             alpha = 0.50,
+             size = 0.75) +
+  geom_line(data = loss_test_rep_df, 
+            linetype = 'dotted', 
+            alpha = 0.50,
+            size = 0.50) +
+  facet_wrap(~structure) +
+  theme(panel.background = element_rect(fill = "white",
+                                  colour = "white",
+                                  size = 0.5, linetype = "solid"))
+
+# Exporting figures 1000 x 591
+```
+
+```{r}
+# Remove all loss information from memory
+rm(list = ls()[grep("loss", ls())])
+```
+
+# Behavior of models
+
+Reading in performance on different models
+
+```{r}
+behavior_path = paste(getwd(), "/behavior/", sep = "")
+
+paths_all_model_behav = fs::dir_ls(path = behavior_path,
+                                      type = "directory",
+                                      recurse = FALSE)
+```
+
+```{r}
+library(glue)
+
+get_behavior = function(all_behav_dir, model = "*", epoch = "*", behavior_type = "*") {
+  glob = glue("*{model}_e{epoch}_behavior_{behavior_type}.csv")
+  
+  paths = fs::dir_ls(path = all_behav_dir,
+                      type = "file",
+                      recurse = TRUE,
+                      glob = glob)
+  
+  paths %>%
+    map_df(~read_csv(.))
+}
+```
+
+```{r}
+behav_train_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                              model = "*",
+                              epoch = "199",
+                              behavior_type = "train")
+
+behav_test_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                             model = "*",
+                             epoch = "199",
+                             behavior_type = "test")
+
+behav_lnoun_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                  model = "*",
+                                  epoch = "199",
+                                  behavior_type = "noun_list")
+
+behav_snonw_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                  model = "*",
+                                  epoch = "199",
+                                  behavior_type = "single_nonword_repetition")
+
+behav_lnonw_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                 model = "*",
+                                 epoch = "199",
+                                 behavior_type = "nonword_list")
+
+behav_scrs_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                 model = "*",
+                                 epoch = "199",
+                                 behavior_type = "scrambled_sentence")
+
+behav_lxsy_vb_inn_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                        model = "*",
+                                        epoch = "199",
+                                        behavior_type = "lexsyn_violation_vb_inn")
+
+behav_lxsy_vb_int_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                        model = "*",
+                                        epoch = "199",
+                                        behavior_type = "lexsyn_violation_vb_int")
+
+behav_lxsy_vb_trn_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                        model = "*",
+                                        epoch = "199",
+                                        behavior_type = "lexsyn_violation_vb_trn")
+
+behav_lxsy_snb_inn_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                         model = "*",
+                                         epoch = "199",
+                                         behavior_type = "lexsyn_violation_snb_inn")
+
+behav_lxsy_pvnb_inn_rep_df = get_behavior(all_behav_dir = paths_all_model_behav,
+                                          model = "*",
+                                          epoch = "199",
+                                          behavior_type = "lexsyn_violation_pvnb_inn")
+```
+
+# Repetition performance
+
+```{r}
+# Function to score repetition performance
+repetition_score = function(df, 
+                            filter_task = 'repetition',
+                            toph = 'toph_max.0_id', oph = 'oph_max.0_id',
+                            condition = NA,
+                            word1_label = 'Subject',
+                            word2_label = 'Dit. verb', 
+                            word3_label = 'IO', 
+                            word4_label = 'DO',
+                            structure_default = NA,
+                            structure_by_length = FALSE) {
+  
+  # Change sentence to utterance if sentence is present
+  if (!'utterance' %in% colnames(df)) {
+    df = df %>%
+      mutate(utterance = sentence)
+  }
+  
+  # Add NA if structure variable is missing
+  if (!'structure' %in% colnames(df)) {
+    df = df %>%
+      mutate(structure = structure_default)
+  }
+  
+  if (structure_by_length) {
+    df = df %>%
+      mutate(structure = recode(max_length, 
+                                "12" = "Scr. intransitive", 
+                                "18" = "Scr. transitive", 
+                                "24" = "Scr. ditransitive"))
+  }
+  
+  # Score repetition
+  df %>%
+    filter(task == filter_task & t >= max_length / 2) %>%
+    mutate(acc0 = ifelse(!!sym(toph) == !!sym(oph), 1, 0),
+           structure = str_to_sentence(structure),
+           structure = as_factor(structure),
+           structure = suppressWarnings(fct_relevel(structure, 
+                                  "Intransitive", 
+                                  "Transitive", 
+                                  "Ditransitive",
+                                  "Scr. intransitive",
+                                  "Scr. transitive",
+                                  "Scr. ditransitive",
+                                  NA)),
+           condition = condition,
+           t = t - (max_length / 2),
+           word_produced = cut(t, breaks = c(-1, 2, 5, 8, 12), 
+                               labels = c(word1_label, 
+                                          word2_label,
+                                          word3_label,
+                                          word4_label)),
+           word_produced_num = cut(t, breaks = c(-1, 2, 5, 8, 12),
+                                   labels = c(1, 2, 3, 4)),
+           word_produced_num_str = cut(t, breaks = c(-1, 2, 5, 8, 12),
+                                   labels = c("Word 1", "Word 2", "Word 3", "Word 4"))) %>%
+    select(any_of(c('model', 'utterance', 'task', 'structure', 'condition',
+                    'probability', 't', 'max_length', 
+                    'toph', 'oph', 
+                    'word_produced', 'word_produced_num', 'word_produced_num_str',
+                    'acc0')))
+}
+```
+
+```{r}
+repetition_score_word = function(df, 
+                            filter_task = 'repetition',
+                            toph = 'toph_max.0_id', oph = 'oph_max.0_id',
+                            condition = NA,
+                            word1_label = 'Subject',
+                            word2_label = 'Dit. verb', 
+                            word3_label = 'IO', 
+                            word4_label = 'DO',
+                            structure_default = NA,
+                            structure_by_length = FALSE) {
+  
+  # Change sentence to utterance if sentence is present
+  if (!'utterance' %in% colnames(df)) {
+    df = df %>%
+      mutate(utterance = sentence)
+  }
+  
+  # Add NA if structure variable is missing
+  if (!'structure' %in% colnames(df)) {
+    df = df %>%
+      mutate(structure = structure_default)
+  }
+  
+  if (structure_by_length) {
+    df = df %>%
+      mutate(structure = recode(max_length, 
+                                "12" = "Scr. intransitive", 
+                                "18" = "Scr. transitive", 
+                                "24" = "Scr. ditransitive"))
+  }
+  
+  # Score repetition
+  df %>%
+    filter(task == filter_task & t >= max_length / 2) %>%
+    mutate(acc0 = ifelse(!!sym(toph) == !!sym(oph), 1, 0),
+           structure = str_to_sentence(structure),
+           structure = as_factor(structure),
+           structure = suppressWarnings(fct_relevel(structure, 
+                                  "Intransitive", 
+                                  "Transitive", 
+                                  "Ditransitive",
+                                  "Scr. intransitive",
+                                  "Scr. transitive",
+                                  "Scr. ditransitive",
+                                  NA)),
+           condition = condition,
+           t = t - (max_length / 2),
+           word_produced = cut(t, breaks = c(-1, 2, 5, 8, 12), 
+                               labels = c(word1_label, 
+                                          word2_label,
+                                          word3_label,
+                                          word4_label)),
+           word_produced_num = cut(t, breaks = c(-1, 2, 5, 8, 12),
+                                   labels = c(1, 2, 3, 4)),
+           word_produced_num_str = cut(t, breaks = c(-1, 2, 5, 8, 12),
+                                   labels = c("Word 1", "Word 2", "Word 3", "Word 4"))) %>%
+    select(any_of(c('model', 'utterance', 'task', 'structure', 'condition',
+                    'probability', 't', 'max_length', 
+                    'toph', 'oph', 
+                    'word_produced', 'word_produced_num', 'word_produced_num_str',
+                    'acc0'))) %>%
+    group_by(model, utterance, task, structure, condition, max_length,
+             word_produced, word_produced_num, word_produced_num_str) %>%
+    summarise(acc0 = ifelse(sum(acc0) == 3, 1, 0))
+}
+```
+
+```{r}
+# Function to generate figures for repetition performance
+repetition_fig = function(df, title,
+                          
+                          jitter_alpha = 0.10,
+                          jitter_height = 0.025,
+                          color = '#36393B',
+                          save = FALSE,
+                          save_dir = 'figs/',
+                          save_filename = 'fig.png',
+                          save_width = 20,
+                          save_height = 12) {
+  
+  df_utterance = df %>%
+    group_by(utterance, structure, word_produced) %>%
+    summarise(m_acc0 = mean(acc0),
+              se_acc0 = se(acc0))
+
+  fig = df %>%
+    group_by(structure, word_produced) %>%
+    summarise(m_acc0 = mean(acc0),
+              se_acc0 = se(acc0)) %>%
+    ggplot(aes(x = word_produced, 
+               y = m_acc0, 
+               group = structure)) +
+    geom_point(size = 2, color = color) +
+    geom_line(size = 1.25, alpha = 1, color = color) +
+    geom_errorbar(aes(ymin = m_acc0 - se_acc0, ymax = m_acc0 + se_acc0),
+                  width = 0.25, color = color) +
+    scale_y_continuous(limits = c(0.0, 1.0), oob = scales::squish, expand = c(0, 0)) +
+    labs(x = "Word",
+         y = "Proportion correctly produced phones",
+         color = "Word",
+         title = paste('Repetition: ', title)) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+    facet_wrap(~structure) +
+    scale_colour_branded() +
+    geom_jitter(data = df_utterance, 
+                size = 0.5, 
+                alpha = jitter_alpha, 
+                height = jitter_height)
+  
+  if (save) {
+    ggsave(filename = paste(save_dir, save_filename, sep = ""),
+           plot = fig,
+           width = save_width, 
+           height = save_height,
+           units = 'cm')
+  }
+  
+  return (fig)
+}
+```
+
+```{r}
+repetition_fig_comparison = function(df, comparison_df, title,
+                                     main_size = 1.25,
+                                     line_alpha = 1,
+                                     bar_size = 0.25,
+                                     jitter_alpha = 0.05,
+                                     jitter_height = 0.01,
+                                     comparison_size = 1.25,
+                                     comparison_linetype = 'solid',
+                                     main_color = '#36393B',
+                                     comparison_color = '#A5CC6B',
+                                     save = FALSE,
+                                     save_dir = 'figs/',
+                                     save_filename = 'fig.png',
+                                     save_width = 20,
+                                     save_height = 12) {
+  df_utterance = df %>%
+    group_by(utterance, structure, word_produced_num_str) %>%
+    summarise(m_acc0 = mean(acc0),
+              se_acc0 = se(acc0))
+  
+  comparison_df_simp = comparison_df %>%
+    group_by(structure, word_produced_num_str) %>%
+    summarise(m_acc0 = mean(acc0),
+              se_acc0 = se(acc0))
+
+  fig = df %>%
+    group_by(structure, word_produced_num_str) %>%
+    summarise(m_acc0 = mean(acc0),
+              se_acc0 = se(acc0)) %>%
+    ggplot(aes(x = word_produced_num_str, 
+               y = m_acc0, 
+               group = structure)) +
+    geom_point(size = main_size, color = main_color) +
+    geom_line(size = main_size, alpha = line_alpha, color = main_color) +
+    geom_errorbar(aes(ymin = m_acc0 - se_acc0, ymax = m_acc0 + se_acc0),
+                  width = bar_size,
+                  color = main_color) +
+    scale_y_continuous(limits = c(0.0, 1.0), oob = scales::squish, expand = c(0, 0)) +
+    labs(x = "Word",
+         y = "Proportion correctly produced phones",
+         color = "Word",
+         title = paste('Repetition: ', title)) +
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+    scale_colour_branded() +
+    geom_jitter(data = df_utterance, size = 0.5, alpha = jitter_alpha, height = jitter_height) +
+    geom_point(data = comparison_df_simp, 
+               size = comparison_size, 
+               color = comparison_color) +
+    geom_line(data = comparison_df_simp, 
+              size = comparison_size,
+              alpha = line_alpha, 
+              color = comparison_color, 
+              linetype = comparison_linetype) +
+    geom_errorbar(data = comparison_df_simp, 
+                  aes(ymin = m_acc0 - se_acc0, ymax = m_acc0 + se_acc0),
+                  alpha = line_alpha,
+                  width = bar_size,
+                  color = comparison_color)
+  
+  if (save) {
+    ggsave(filename = paste(save_dir, save_filename, sep = ""),
+           plot = fig,
+           width = save_width, 
+           height = save_height,
+           units = 'cm')
+  }
+  
+  return (fig)
+}
+```
+
+## Trained examples
+
+```{r}
+behav_train_rep_df_scored = repetition_score(df = behav_train_df,
+                                             condition = 'train')
+
+repetition_fig(behav_train_rep_df_scored, title = 'Trained sentences', 
+               save = TRUE, save_filename = 'rep_train.png',
+               save_width = 15, save_height = 15)
+```
+
+```{r}
+# Taking a quick look at repetition accuracy according to probability
+behav_train_rep_df_scored %>%
+  group_by(utterance, structure, probability) %>%
+  summarise(acc0_m = mean(acc0)) %>%
+  ggplot(aes(x = log(probability), y = acc0_m, color = structure)) +
+  geom_jitter(alpha = 0.5) +
+  scale_y_continuous(limits = c(0.0, 1.05), oob = scales::squish, expand = c(0, 0)) +
+  scale_colour_branded() +
+  labs(x = "Probability (log)",
+       y = "Proportion correctly repeated phones",
+       color = "Structure",
+       title = "Repetition: Training sentences")
+```
+
+## Test examples
+
+```{r}
+behav_test_rep_df_scored = repetition_score(df = behav_test_df,
+                                            condition = 'test')
+
+repetition_fig(behav_test_rep_df_scored, title = 'Test sentences',
+               save = TRUE, save_filename = 'rep_test.png',
+               save_width = 15, save_height = 15)
+```
+
+```{r}
+# Taking a quick look at repetition accuracy according to probability
+behav_test_rep_df_scored %>%
+  group_by(utterance, structure, probability) %>%
+  summarise(acc0_m = mean(acc0)) %>%
+  ggplot(aes(x = log(probability), y = acc0_m, color = structure)) +
+  geom_jitter(alpha = 0.5) +
+  scale_y_continuous(limits = c(0.0, 1.05), oob = scales::squish, expand = c(0, 0)) +
+  scale_colour_branded() +
+  labs(x = "Probability (log)",
+       y = "Proportion correctly repeated phones",
+       color = "Structure",
+       title = "Repetition: Test sentences")
+```
+
+```{r}
+behav_test_dit_rep_df_scored = repetition_score(df = behav_test_df,
+                                                condition = 'test') %>%
+  filter(structure == 'Ditransitive')
+
+repetition_fig(behav_test_dit_rep_df_scored, title = 'Test sentences',
+               save = TRUE, save_filename = 'rep_test_dit.png',
+               color = '#A5CC6B',
+               save_width = 15, save_height = 15)
+```
+
+## Random noun list
+
+```{r}
+behav_lnoun_rep_df_scored = repetition_score(df = behav_lnoun_rep_df,
+                                             condition = 'noun_list',
+                                             word1_label = 'Word 1',
+                                             word2_label = 'Word 2',
+                                             word3_label = 'Word 3',
+                                             word4_label = 'Word 4')
+
+repetition_fig(behav_lnoun_rep_df_scored, title = 'Noun list',
+               color = '#A5CC6B',
+               save = TRUE, save_filename = 'rep_lnoun.png',
+               save_width = 15, save_height = 15)
+```
+
+## Nonword alone
+
+```{r}
+behav_snonw_rep_df_scored = repetition_score(df = behav_snonw_rep_df,
+                                             condition = 'single_nonword',
+                                             filter_task = 'repetition_word',
+                                             word1_label = 'Word 1',
+                                             word2_label = 'Word 2',
+                                             word3_label = 'Word 3',
+                                             word4_label = 'Word 4')
+
+repetition_fig(behav_snonw_rep_df_scored, title = 'Single legal nonword',
+               jitter_alpha = 0.5,
+               save_width = 15, save_height = 15)
+```
+
+## Nonword lists
+
+```{r}
+behav_lnonw_rep_df_scored = repetition_score(df = behav_lnonw_rep_df,
+                                             condition = 'nonword_list',
+                                             word1_label = 'Word 1',
+                                             word2_label = 'Word 2',
+                                             word3_label = 'Word 3',
+                                             word4_label = 'Word 4')
+
+repetition_fig(behav_lnonw_rep_df_scored, title = 'Legal nonword list',
+               save = TRUE, save_filename = 'rep_lnonw.png',
+               save_width = 15, save_height = 15)
+```
+
+## Scrambled sentences
+
+```{r}
+behav_scrs_rep_df_scored = repetition_score(df = behav_scrs_rep_df,
+                                            condition = 'scrambled_sentence',
+                                            word1_label = 'Word 1',
+                                            word2_label = 'Word 2',
+                                            word3_label = 'Word 3',
+                                            word4_label = 'Word 4',
+                                            structure_by_length = TRUE)
+
+repetition_fig(behav_scrs_rep_df_scored, title = 'Scrambled sentences',
+               save = TRUE, save_filename = 'rep_scrs.png',
+               save_width = 15, save_height = 15)
+```
+
+```{r}
+behav_scrs_dit_rep_df_scored = repetition_score(df = behav_scrs_rep_df,
+                                                condition = 'scrambled_sentence',
+                                                word1_label = 'Word 1',
+                                                word2_label = 'Word 2',
+                                                word3_label = 'Word 3',
+                                                word4_label = 'Word 4',
+                                                structure_by_length = TRUE) %>%
+  filter(structure == 'Scr. ditransitive')
+
+repetition_fig_comparison(behav_scrs_dit_rep_df_scored, 
+                          comparison_df = behav_test_dit_rep_df_scored,
+                          title = 'Scrambled sentence',
+                          jitter_height = 0.025,
+                          jitter_alpha = 0.1,
+                          save = TRUE, save_filename = 'rep_scrs_dit_comp_test_dit.png',
+                          save_width = 15, save_height = 15)
+```
+
+# Repetition of sentences with lexico-syntactic violations
+
+### First a look at repetition of test sentences again for a comparison
+
+```{r}
+behav_test_rep_df_scored = repetition_score_word(df = behav_test_df)
+repetition_fig(behav_test_rep_df_scored, title = 'Test sentences',
+               save = FALSE)
+```
+
+### Violation of verb biases: Swapping ditransitive verb with an inanimate noun
+
+```{r}
+behav_lxsy_vb_inn_rep_df_scored = repetition_score(df = behav_lxsy_vb_inn_rep_df,
+                                                   condition = 'lxsy_vb_inn',
+                                                   word1_label = 'Subject',
+                                                   word2_label = 'Inan. noun',
+                                                   word3_label = 'IO',
+                                                   word4_label = 'DO',
+                                                   structure_default = 'Ditransitive')
+
+repetition_fig(behav_lxsy_vb_inn_rep_df_scored, 
+               title = 'Verb bias violation (inanimate noun)',
+               save = TRUE, save_filename = 'rep_lxsy_vb_inn.png',
+               save_width = 15, save_height = 15)
+
+repetition_fig_comparison(behav_lxsy_vb_inn_rep_df_scored,
+                          comparison_df = behav_test_dit_rep_df_scored,
+                          title = 'Verb bias violation (inanimate noun)',
+                          jitter_height = 0.025,
+                          save = TRUE, save_filename = 'rep_lxsy_vb_inn_comp_test_dit.png',
+                          save_width = 15, save_height = 15)
+```
+
+### Violation of verb biases: Swapping ditransitive verb with transitive verb
+
+```{r}
+behav_lxsy_vb_trn_rep_df_scored = repetition_score(df = behav_lxsy_vb_trn_rep_df,
+                                                   condition = 'lxsy_vb_trn',
+                                                   word1_label = 'Subject',
+                                                   word2_label = 'Trn. verb',
+                                                   word3_label = 'IO',
+                                                   word4_label = 'DO',
+                                                   structure_default = 'Ditransitive')
+repetition_fig(behav_lxsy_vb_trn_rep_df_scored, 
+               title = 'Verb bias violation (transitive)',
+               save = TRUE, save_filename = 'rep_lxsy_vb_trn.png',
+               save_width = 15, save_height = 15)
+
+repetition_fig_comparison(behav_lxsy_vb_trn_rep_df_scored,
+                          comparison_df = behav_test_dit_rep_df_scored,
+                          title = 'Verb bias violation (transitive)',
+                          save = TRUE, save_filename = 'rep_lxsy_vb_trn_comp_test_dit.png',
+                          save_width = 15, save_height = 15)
+```
+
+### Violation of verb biases: Swapping ditransitive verb with an intransitive verb
+
+```{r}
+behav_lxsy_vb_int_rep_df_scored = repetition_score(df = behav_lxsy_vb_int_rep_df,
+                                                   condition = 'lxsy_vb_int',
+                                                   word1_label = 'Subject',
+                                                   word2_label = 'Int. verb',
+                                                   word3_label = 'IO',
+                                                   word4_label = 'DO',
+                                                   structure_default = 'Ditransitive')
+repetition_fig(behav_lxsy_vb_int_rep_df_scored, 
+               title = 'Verb bias violation (intransitive)',
+               save = TRUE, save_filename = 'rep_lxsy_vb_int.png',
+               save_width = 15, save_height = 15)
+
+repetition_fig_comparison(behav_lxsy_vb_int_rep_df_scored,
+                          comparison_df = behav_test_dit_rep_df_scored,
+                          title = 'Verb bias violation (intransitive)',
+                          save = TRUE, save_filename = 'rep_lxsy_vb_int_comp_test_dit.png',
+                          save_width = 15, save_height = 15)
+```
+
+### Violation of subject noun animacy: Swapping subject noun with inanimate noun
+
+```{r}
+behav_lxsy_snb_inn_rep_df_scored = repetition_score(df = behav_lxsy_snb_inn_rep_df,
+                                                    condition = 'lxsy_snb_inn',
+                                                    word1_label = 'Inan. noun',
+                                                    word2_label = 'Dit. verb',
+                                                    word3_label = 'IO',
+                                                    word4_label = 'DO',
+                                                    structure_default = 'Ditransitive')
+repetition_fig(behav_lxsy_snb_inn_rep_df_scored, 
+               title = 'Subject bias violation (inanimate noun)',
+               save = TRUE, save_filename = 'rep_lxsy_snb_inn.png',
+               save_width = 15, save_height = 15)
+
+repetition_fig_comparison(behav_lxsy_snb_inn_rep_df_scored,
+                          comparison_df = behav_test_dit_rep_df_scored,
+                          title = 'Subject bias violation (inanimate noun)',
+                          save = TRUE, save_filename = 'rep_lxsy_snb_inn_comp_test_dit.png',
+                          save_width = 15, save_height = 15)
+```
+
+### Violation of indirect object animacy: Swapping indirect object with inanimate object
+
+```{r}
+behav_lxsy_pvnb_inn_rep_df_scored = repetition_score(df = behav_lxsy_pvnb_inn_rep_df,
+                                                     condition = 'lxsy_pvnb_inn',
+                                                     word1_label = 'Subject',
+                                                     word2_label = 'Dit. verb',
+                                                     word3_label = 'Inan. noun',
+                                                     word4_label = 'DO',
+                                                     structure_default = 'Ditransitive')
+repetition_fig(behav_lxsy_pvnb_inn_rep_df_scored, 
+               title = 'Sentences with postverbal noun bias violation (inanimate noun)',
+               save = TRUE, save_filename = 'rep_lxsy_pvnb_inn.png',
+               save_width = 15, save_height = 15)
+
+repetition_fig_comparison(behav_lxsy_pvnb_inn_rep_df_scored,
+                          comparison_df = behav_test_dit_rep_df_scored,
+                          title = 'Postverbal noun bias violation (inanimate noun)',
+                          save = TRUE, save_filename = 'rep_lxsy_pvnb_inn_comp_test_dit.png',
+                          save_width = 15, save_height = 15)
+```
+
+# Statistical modeling of repetition data
+
+Is the model better at repeating lists of (legal) nonwords compared to randomized lists of nouns?
+
+```{r}
+behav_comparison_lnonw_lnoun_df = behav_lnonw_rep_df_scored %>%
+  full_join(y = behav_lnoun_rep_df_scored) %>%
+  mutate(condition_num = recode(condition,
+                                "nonword_list" = -0.5, "noun_list" = 0.5),
+         word_produced_num_c = recode(word_produced_num,
+                                      "1" = -0.5, "2" = -0.25, "3" = 0.25, "4" = 0.5))
+
+behav_comparison_lnonw_lnoun_df %>%
+  group_by(condition, word_produced_num) %>%
+  summarise(acc0_m = mean(acc0),
+            acc0_se = se(acc0))
+
+m_noun_rep_simp = glmer(acc0 ~ 1 + condition_num + word_produced_num_c + 
+                     condition_num:word_produced_num_c +
+                     (1 + condition_num|model) + 
+                     (1|utterance),
+                   data = behav_comparison_lnonw_lnoun_df,
+                   family = binomial,
+                   control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_noun_rep_simp)
+Anova(m_noun_rep_simp, type = 3)
+
+m_noun_rep = glmer(acc0 ~ 1 + condition_num + word_produced_num_c + I(word_produced_num_c^2) + 
+                     condition_num:word_produced_num_c + condition_num:I(word_produced_num_c^2) +
+                     (1 + condition_num|model) + 
+                     (1|utterance),
+                   data = behav_comparison_lnonw_lnoun_df,
+                   family = binomial,
+                   control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_noun_rep)
+Anova(m_noun_rep, type = 3)
+```
+
+Is this model better at repeating test sentences (held out of training) compared to scrambled sentences?
+
+```{r}
+# Combining repetition of test sentences and repetition of scrambled sentences
+behav_comparison_test_scrs_df = behav_test_rep_df_scored %>%
+  full_join(y = behav_scrs_rep_df_scored) %>%
+  filter((structure == 'Ditransitive') | (structure == 'Scrambled ditransitive')) %>%
+  mutate(condition_num = recode(condition, 
+                                "test" = 0.5, "scrambled_sentence" = -0.5),
+         word_produced_num_c = recode(word_produced_num, 
+                                      "1" = -0.5, "2" = -0.25, "3" = 0.25, "4" = 0.5))
+
+behav_comparison_test_scrs_df %>%
+  group_by(condition, word_produced_num) %>%
+  summarise(acc0_m = mean(acc0),
+            acc0_se = se(acc0))
+
+m_sent_sup = glmer(acc0 ~ 1 + condition_num + word_produced_num_c + 
+                     condition_num:word_produced_num_c +
+                     (1 + condition_num|model) + 
+                     (1|utterance),
+                   data = behav_comparison_test_scrs_df,
+                   family = binomial,
+                   control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_sent_sup)
+Anova(m_sent_sup, type = 3)
+```
+
+Is this model better at repeating test sentences (held out of training) compared to sentences with violations of lexico-syntactic constraints?
+
+Here we are considering swapping the ditransitive verb with an inanimate noun
+
+```{r}
+behav_comparison_test_lxsy_vb_inn = behav_test_rep_df_scored %>%
+  filter(structure == 'Ditransitive') %>%
+  full_join(y = behav_lxsy_vb_inn_rep_df_scored) %>%
+  mutate(condition_num = recode(condition, 
+                                "test" = 0.5, "lxsy_vb_inn" = -0.5),
+         word_produced_num_c = recode(word_produced_num, 
+                                      "1" = -0.5, "2" = -0.25, "3" = 0.25, "4" = 0.5))
+
+behav_comparison_test_lxsy_vb_inn %>%
+  group_by(condition, word_produced_num) %>%
+  summarise(acc0_m = mean(acc0),
+            acc0_se = se(acc0))
+
+m_sent_sup_lxsy_vb_inn = glmer(acc0 ~ 1 + condition_num + word_produced_num_c + 
+                                 condition_num:word_produced_num_c +
+                                 (1 + condition_num|model) + 
+                                 (1|utterance),
+                               data = behav_comparison_test_lxsy_vb_inn,
+                               family = binomial,
+                               control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_sent_sup_lxsy_vb_inn)
+Anova(m_sent_sup_lxsy_vb_inn, type = 3)
+```
+
+Swapping the ditransitive verb with a transitive verb
+
+```{r}
+behav_comparison_test_lxsy_vb_trn = behav_test_rep_df_scored %>%
+  filter(structure == 'Ditransitive') %>%
+  full_join(y = behav_lxsy_vb_trn_rep_df_scored) %>%
+  mutate(condition_num = recode(condition, 
+                                "test" = 0.5, "lxsy_vb_trn" = -0.5),
+         word_produced_num_c = recode(word_produced_num, 
+                                      "1" = -0.5, "2" = -0.25, "3" = 0.25, "4" = 0.5))
+
+behav_comparison_test_lxsy_vb_trn %>%
+  group_by(condition, word_produced_num) %>%
+  summarise(acc0_m = mean(acc0),
+            acc0_se = se(acc0))
+
+m_sent_sup_lxsy_vb_trn = glmer(acc0 ~ 1 + condition_num + word_produced_num_c +
+                                 condition_num:word_produced_num_c +
+                                 (1 + condition_num|model) + 
+                                 (1|utterance),
+                               data = behav_comparison_test_lxsy_vb_trn,
+                               family = binomial,
+                               control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_sent_sup_lxsy_vb_trn)
+Anova(m_sent_sup_lxsy_vb_trn, type = 3)
+```
+
+Swapping the ditransitive verb with an intransitive verb
+
+```{r}
+behav_comparison_test_lxsy_vb_int = behav_test_rep_df_scored %>%
+  filter(structure == 'Ditransitive') %>%
+  full_join(y = behav_lxsy_vb_int_rep_df_scored) %>%
+  mutate(condition_num = recode(condition, 
+                                    "test" = 0.5, "lxsy_vb_int" = -0.5),
+         word_produced_num_c = recode(word_produced_num, 
+                                      "1" = -0.5, "2" = -0.25, "3" = 0.25, "4" = 0.5))
+
+behav_comparison_test_lxsy_vb_int %>%
+  group_by(condition, word_produced_num) %>%
+  summarise(acc0_m = mean(acc0),
+            acc0_se = se(acc0))
+
+m_sent_sup_lxsy_vb_int = glmer(acc0 ~ 1 + condition_num + word_produced_num_c +
+                                 condition_num:word_produced_num_c +
+                                 (1 + condition_num|model) + 
+                                 (1|utterance),
+                               data = behav_comparison_test_lxsy_vb_int,
+                               family = binomial,
+                               control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_sent_sup_lxsy_vb_int)
+Anova(m_sent_sup_lxsy_vb_int, type = 3)
+```
+
+Swapping the animate subject noun with an inanimate noun
+
+```{r}
+behav_comparison_test_lxsy_snb_inn = behav_test_rep_df_scored %>%
+  filter(structure == 'Ditransitive') %>%
+  full_join(y = behav_lxsy_snb_inn_rep_df_scored) %>%
+  mutate(condition_num = recode(condition, 
+                                "test" = 0.5, "lxsy_snb_inn" = -0.5),
+         word_produced_num_c = recode(word_produced_num, 
+                                      "1" = -0.5, "2" = -0.25, "3" = 0.25, "4" = 0.5))
+
+behav_comparison_test_lxsy_snb_inn %>%
+  group_by(condition, word_produced_num) %>%
+  summarise(acc0_m = mean(acc0),
+            acc0_se = se(acc0))
+
+m_sent_sup_lxsy_snb_inn = glmer(acc0 ~ 1 + condition_num + word_produced_num_c +
+                                  condition_num:word_produced_num_c +
+                                  (1 + condition_num|model) + 
+                                  (1|utterance),
+                                data = behav_comparison_test_lxsy_snb_inn,
+                                family = binomial,
+                                control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_sent_sup_lxsy_snb_inn)
+Anova(m_sent_sup_lxsy_snb_inn, type = 3)
+```
+
+Swapping the post-verbal direct object with an inanimate noun
+
+```{r}
+behav_comparison_test_lxsy_pvnb_inn = behav_test_rep_df_scored %>%
+  filter(structure == 'Ditransitive') %>%
+  full_join(y = behav_lxsy_pvnb_inn_rep_df_scored) %>%
+  mutate(condition_num = recode(condition, 
+                                "test" = 0.5, "lxsy_pvnb_inn" = -0.5),
+         word_produced_num_c = recode(word_produced_num, 
+                                      "1" = -0.5, "2" = -0.25, "3" = 0.25, "4" = 0.5))
+
+behav_comparison_test_lxsy_pvnb_inn %>%
+  group_by(condition, word_produced_num) %>%
+  summarise(acc0_m = mean(acc0),
+            acc0_se = se(acc0))
+
+m_sent_sup_lxsy_pvnb_inn = glmer(acc0 ~ 1 + condition_num + word_produced_num_c +
+                                   condition_num:word_produced_num_c +
+                                   (1 + condition_num|model) + (1|utterance),
+                                 data = behav_comparison_test_lxsy_pvnb_inn,
+                                 family = binomial,
+                                 control = glmerControl(optCtrl = list(maxfun = 50000)))
+summary(m_sent_sup_lxsy_pvnb_inn)
+Anova(m_sent_sup_lxsy_pvnb_inn, type = 3)
+```
+
+# Production performance
+
+```{r}
+behav_train_df_prod_scored = behav_train_df %>%
+  filter(task == 'production') %>%
+  mutate(acc0 = ifelse(`toph_max.0_id` == `oph_max.0_id`, 1, 0),
+         acc0 = ifelse(`toph_max.0_id` == `oph_max.0_id`, 1, 0),
+         structure = str_to_title(structure),
+         structure = as_factor(structure),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive")) %>%
+  select(c(sentence, task, t, structure, probability, model,
+           `toph_max.0_id`, `oph_max.0_id`, 
+           `toph_max.0_ac`, `oph_max.0_ac`, acc0)) %>%
+  mutate(word_produced = cut(t, breaks = c(-1, 2, 5, 8, 12), 
+                             labels = c("Subject", 
+                                        "Verb",
+                                        'Noun1',
+                                        'Noun2')),
+         word_produced_num = recode(word_produced,
+                                    "Subject" = 'Word 1', 
+                                    "Verb" = "Word 2",
+                                    "Noun1" = "Word 3",
+                                    "Noun2" = "Word 4"))
+
+behav_train_df_prod_scored %>%
+  ggplot(aes(x = t, y = acc0, fill = word_produced)) +
+  geom_bar(stat = 'summary', fun = 'mean') +
+  scale_y_continuous(limits = c(0.0, 1.0)) +
+  labs(x = 'Timestep',
+       y = 'Proportion correctly produced phones',
+       fill = "Word",
+       title = 'Production: Trained sentences') +
+  facet_wrap(~structure) +
+  scale_fill_branded()
+
+behav_train_df_prod_scored %>%
+  ggplot(aes(x = word_produced_num, y = acc0, fill = word_produced)) +
+  geom_bar(stat = 'summary', fun = 'mean') +
+  scale_y_continuous(limits = c(0.0, 1.0)) +
+  labs(x = 'Word',
+       y = 'Proportion correctly produced phones',
+       fill = "Word",
+       title = 'Production: Trained sentences') +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  facet_wrap(~structure) +
+  scale_fill_branded()
+```
+
+```{r}
+behav_test_df_prod_scored = behav_test_df %>%
+  filter(task == 'production') %>%
+  mutate(acc0 = ifelse(`toph_max.0_id` == `oph_max.0_id`, 1, 0),
+         structure = str_to_title(structure),
+         structure = as_factor(structure),
+         structure = fct_expand(structure, "Intransitive"),
+         structure = fct_relevel(structure, 
+                                 "Intransitive", 
+                                 "Transitive", 
+                                 "Ditransitive")) %>%
+  select(c(sentence, task, t, structure, probability, model,
+           `toph_max.0_id`, `oph_max.0_id`, 
+           `toph_max.0_ac`, `oph_max.0_ac`, acc0)) %>%
+  mutate(word_produced = cut(t, breaks = c(-1, 2, 5, 8, 12), 
+                             labels = c("Subject", 
+                                        "Verb",
+                                        'Noun1',
+                                        'Noun2')),
+         word_produced_num = recode(word_produced,
+                                    "Subject" = 'Word 1', 
+                                    "Verb" = "Word 2",
+                                    "Noun1" = "Word 3",
+                                    "Noun2" = "Word 4"))
+
+behav_test_df_prod_scored %>%
+  ggplot(aes(x = t, y = acc0, fill = word_produced)) +
+  geom_bar(stat = 'summary', fun = 'mean') +
+  scale_y_continuous(limits = c(0.0, 1.0)) +
+  labs(x = 'Timestep',
+       y = 'Proportion correctly produced phones',
+       fill = "Word",
+       title = 'Production: Untrained sentences') +
+  facet_wrap(~structure, drop = FALSE) +
+  scale_fill_branded()
+
+behav_test_df_prod_scored %>%
+  ggplot(aes(x = word_produced_num, y = acc0, fill = word_produced)) +
+  geom_bar(stat = 'summary', fun = 'mean') +
+  scale_y_continuous(limits = c(0.0, 1.0)) +
+  labs(x = 'Word',
+       y = 'Proportion correctly produced phones',
+       fill = "Word",
+       title = 'Production: Untrained sentences') +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  facet_wrap(~structure, drop = FALSE) +
+  scale_fill_branded()
+```
