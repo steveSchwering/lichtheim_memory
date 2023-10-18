@@ -8,4 +8,4 @@ A visualization of the Lichtheim-memory model can be found below:
 
 In this model, forward connections are represented by solid arrows, backward connections through time are represented by dashed arrows, and hidden layers by circles. Input and output layers are represented by boxes.
 
-The repository itself is split into two sections. The first section, in the `artificial_language` folder, contains code to generate the artificial language on which the model was trained. The second section, in the `lichtheim-memory` folder, contains code to train and test the neural network.
+The repository itself is split into three sections. The first section, in the `artificial_language` folder, contains code to generate the artificial language on which the model was trained. The second section, in the `lichtheim-memory` folder, contains code to train and test the neural network. The third section, in the `analysis` folder, contains R scripts to analyze model behavior as you would human subjects behavioral data. Note, in many case, large model data files are excluded from the repository because of their size. Those files are available upon request or can easily be recreated!
